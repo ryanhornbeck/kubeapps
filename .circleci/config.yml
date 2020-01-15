@@ -283,9 +283,9 @@ jobs:
       - checkout
       - <<: *install_helm_cli
       - run: |
-        if [[ "$HELM_VERSION" =~ "v2" ]]; then
-          helm init --client-only
-        fi
+          if [[ "$HELM_VERSION" =~ "v2" ]]; then
+            helm init --client-only
+          fi
       - run: ./script/chart-template-test.sh
   build_go_images:
     docker:
