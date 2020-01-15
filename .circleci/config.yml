@@ -94,8 +94,10 @@ workflows:
       - sync_chart:
           <<: *build_on_master
           requires:
-            - local_e2e_tests_postgresql
-            - local_e2e_tests_mongodb
+            - local_e2e_tests_postgresql_helm2
+            - local_e2e_tests_postgresql_helm3
+            - local_e2e_tests_mongodb_helm2
+            - local_e2e_tests_mongodb_helm3
             - GKE_1_13_MASTER
             - GKE_1_13_LATEST_RELEASE
             - GKE_1_14_MASTER
@@ -103,8 +105,10 @@ workflows:
       - push_images:
           <<: *build_on_master
           requires:
-            - local_e2e_tests_postgresql
-            - local_e2e_tests_mongodb
+            - local_e2e_tests_postgresql_helm2
+            - local_e2e_tests_postgresql_helm3
+            - local_e2e_tests_mongodb_helm2
+            - local_e2e_tests_mongodb_helm3
             - GKE_1_13_MASTER
             - GKE_1_13_LATEST_RELEASE
             - GKE_1_14_MASTER
@@ -112,8 +116,10 @@ workflows:
       - release:
           <<: *build_on_tag
           requires:
-            - local_e2e_tests_postgresql
-            - local_e2e_tests_mongodb
+            - local_e2e_tests_postgresql_helm2
+            - local_e2e_tests_postgresql_helm3
+            - local_e2e_tests_mongodb_helm2
+            - local_e2e_tests_mongodb_helm3
             - GKE_1_13_MASTER
             - GKE_1_13_LATEST_RELEASE
             - GKE_1_14_MASTER
@@ -282,6 +288,7 @@ jobs:
       - <<: *exports
       - checkout
       - <<: *install_helm_cli
+      - run: if [[ "$HELM_VERSION" =~ "v2" ]]; then helm init --client-only; fi
       - run: ./script/chart-template-test.sh
   build_go_images:
     docker:
