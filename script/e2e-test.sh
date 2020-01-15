@@ -26,15 +26,25 @@ source $ROOT_DIR/script/libtest.sh
 echo "IMAGE TAG TO BE TESTED: $DEV_TAG"
 echo "IMAGE_REPO_SUFFIX: $IMG_MODIFIER"
 
+function testHelm {
+  if [[ "$HELM_VERSION" =~ "v2" ]]; then
+    helm test ${HELM_CLIENT_TLS_FLAGS} kubeapps-ci --cleanup
+  else
+    helm test -n kubeapps kubeapps-ci
+  fi
+}
+
 # Print cluster version
 kubectl version
 
 # Helm v2 vs v3 configuration
 USE_HELM3="true"
+RELEASE_NAME="kubeapps-ci"
 if [[ "$HELM_VERSION" =~ "v2" ]]; then
+  RELEASE_NAME="--name kubeapps-ci"
   USE_HELM3="false"
   HELM_CLIENT_TLS_FLAGS="--tls --tls-cert ${CERTS_DIR}/helm.cert.pem --tls-key ${CERTS_DIR}/helm.key.pem"
-  TILLER_PROXY_TLS_FLAGS="--set tillerProxy.tls.key=\"$(cat ${CERTS_DIR}/helm.key.pem)\" --set tillerProxy.tls.cert=\"$(cat ${CERTS_DIR}/helm.cert.pem)\""
+  TILLER_PROXY_TLS_FLAGS="--set tillerProxy.tls.key='$(cat ${CERTS_DIR}/helm.key.pem)' --set tillerProxy.tls.cert='$(cat ${CERTS_DIR}/helm.cert.pem)'"
 
   # Install Tiller with TLS support
   kubectl -n kube-system create sa tiller
@@ -79,8 +89,9 @@ if [[ -n "$TEST_LATEST_RELEASE" ]]; then
 fi
 
 # Install Kubeapps
+kubectl create ns kubeapps
 helm dep up $ROOT_DIR/chart/kubeapps/
-helm install --name kubeapps-ci --namespace kubeapps $ROOT_DIR/chart/kubeapps \
+helm install ${RELEASE_NAME} --namespace kubeapps $ROOT_DIR/chart/kubeapps \
     `# Tiller TLS flags` \
     ${HELM_CLIENT_TLS_FLAGS} \
     `# Tiller-proxy TLS flags` \
@@ -101,19 +112,22 @@ helm install --name kubeapps-ci --namespace kubeapps $ROOT_DIR/chart/kubeapps \
     `# Database choice flags` \
     ${dbFlags} \
     `# Enable Helm 3 flag` \
-    --useHelm3=${USE_HELM3}
+    --set useHelm3=${USE_HELM3}
 
 # Ensure that we are testing the correct image
 k8s_ensure_image kubeapps kubeapps-ci-internal-apprepository-controller $DEV_TAG
 k8s_ensure_image kubeapps kubeapps-ci-internal-dashboard $DEV_TAG
-k8s_ensure_image kubeapps kubeapps-ci-internal-tiller-proxy $DEV_TAG
+if [[ "$HELM_VERSION" =~ "v2" ]]; then
+  k8s_ensure_image kubeapps kubeapps-ci-internal-tiller-proxy $DEV_TAG
+else
+  k8s_ensure_image kubeapps kubeapps-ci-internal-kubeops $DEV_TAG
+fi
 
 # Wait for Kubeapps Pods
 deployments=(
   kubeapps-ci
   kubeapps-ci-internal-apprepository-controller
   kubeapps-ci-internal-assetsvc
-  kubeapps-ci-internal-tiller-proxy
   kubeapps-ci-internal-dashboard
 )
 for dep in ${deployments[@]}; do
@@ -133,7 +147,6 @@ kubectl get ep --namespace=kubeapps
 svcs=(
   kubeapps-ci
   kubeapps-ci-internal-assetsvc
-  kubeapps-ci-internal-tiller-proxy
   kubeapps-ci-internal-dashboard
 )
 for svc in ${svcs[@]}; do
@@ -144,13 +157,13 @@ done
 # Run helm tests
 set +e
 
-helm test ${HELM_CLIENT_TLS_FLAGS} kubeapps-ci --cleanup
+testHelm
 code=$?
 
 if [[ "$code" != 0 ]]; then
   echo "Helm test failed, retrying..."
   # Avoid temporary issues, retry
-  helm test ${HELM_CLIENT_TLS_FLAGS} kubeapps-ci
+  testHelm
   code=$?
 fi
 
