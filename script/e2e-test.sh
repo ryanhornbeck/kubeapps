@@ -68,12 +68,14 @@ assetSyncerImage="kubeapps/asset-syncer"
 assetsvcImage="kubeapps/assetsvc"
 dashboardImage="kubeapps/dashboard"
 tillerProxyImage="kubeapps/tiller-proxy"
+kubeopsImage="kubeapps/kubeops"
 if [[ -n "$TEST_LATEST_RELEASE" ]]; then
   apprepositoryControllerImage="bitnami/kubeapps-apprepository-controller"
   assetSyncerImage="bitnami/kubeapps-asset-syncer"
   assetsvcImage="bitnami/kubeapps-assetsvc"
   dashboardImage="bitnami/kubeapps-dashboard"
   tillerProxyImage="bitnami/kubeapps-tiller-proxy"
+  kubeopsImage="bitnami/kubeapps-kubeops"
 fi
 
 # Install Kubeapps
@@ -94,6 +96,8 @@ helm install --name kubeapps-ci --namespace kubeapps $ROOT_DIR/chart/kubeapps \
     --set dashboard.image.repository=${dashboardImage}${IMG_MODIFIER} \
     --set tillerProxy.image.tag=${DEV_TAG} \
     --set tillerProxy.image.repository=${tillerProxyImage}${IMG_MODIFIER} \
+    --set kubeops.image.tag=${DEV_TAG} \
+    --set kubeops.image.repository=${kubeopsImage}${IMG_MODIFIER} \
     `# Database choice flags` \
     ${dbFlags} \
     `# Enable Helm 3 flag` \
