@@ -35,14 +35,28 @@ workflows:
           <<: *build_always
       - build_dashboard:
           <<: *build_always
-      - local_e2e_tests_mongodb:
+      - local_e2e_tests_mongodb_helm2:
           <<: *build_always
           requires:
             - test_go
             - test_dashboard
             - build_go_images
             - build_dashboard
-      - local_e2e_tests_postgresql:
+      - local_e2e_tests_postgresql_helm2:
+          <<: *build_always
+          requires:
+            - test_go
+            - test_dashboard
+            - build_go_images
+            - build_dashboard
+      - local_e2e_tests_mongodb_helm3:
+          <<: *build_always
+          requires:
+            - test_go
+            - test_dashboard
+            - build_go_images
+            - build_dashboard
+      - local_e2e_tests_postgresql_helm3:
           <<: *build_always
           requires:
             - test_go
@@ -129,8 +143,6 @@ exports: &exports
     # Apart from using a DEV_TAG we use a different image ID to avoid polluting the tag
     # history of the production tag
     echo "export IMG_MODIFIER=-ci" >> $BASH_ENV
-    # Helm version (should be +2.10)
-    echo "export HELM_VERSION=v2.14.0" >> $BASH_ENV
 build_images: &build_images
   steps:
     - setup_remote_docker:
@@ -270,7 +282,10 @@ jobs:
       - <<: *exports
       - checkout
       - <<: *install_helm_cli
-      - run: helm init --client-only
+      - run: |
+        if [[ "$HELM_VERSION" =~ "v2" ]]; then
+          helm init --client-only
+        fi
       - run: ./script/chart-template-test.sh
   build_go_images:
     docker:
@@ -292,14 +307,28 @@ jobs:
     steps:
       - checkout
       - run: REPO_DOMAIN=kubeapps REPO_NAME=kubeapps ./script/create_release.sh ${CIRCLE_TAG}
-  local_e2e_tests_mongodb:
+  local_e2e_tests_mongodb_helm2:
     machine: true
     environment:
       KUBEAPPS_DB: "mongodb"
+      HELM_VERSION: "v2.14.0"
     <<: *local_e2e_steps
-  local_e2e_tests_postgresql:
+  local_e2e_tests_postgresql_helm2:
     machine: true
     environment:
+      HELM_VERSION: "v2.14.0"
+      KUBEAPPS_DB: "postgresql"
+    <<: *local_e2e_steps
+  local_e2e_tests_mongodb_helm3:
+    machine: true
+    environment:
+      HELM_VERSION: "v3.0.2"
+      KUBEAPPS_DB: "mongodb"
+    <<: *local_e2e_steps
+  local_e2e_tests_postgresql_helm3:
+    machine: true
+    environment:
+      HELM_VERSION: "v3.0.2"
       KUBEAPPS_DB: "postgresql"
     <<: *local_e2e_steps
   GKE_1_13_MASTER:

@@ -20,7 +20,6 @@ ROOT_DIR=`cd "$( dirname "${BASH_SOURCE[0]}" )/.." >/dev/null && pwd`
 DEV_TAG=${1:?}
 IMG_MODIFIER=${2:-""}
 CERTS_DIR="${ROOT_DIR}/script/test-certs"
-HELM_CLIENT_TLS_FLAGS="--tls --tls-cert ${CERTS_DIR}/helm.cert.pem --tls-key ${CERTS_DIR}/helm.key.pem"
 
 source $ROOT_DIR/script/libtest.sh
 
@@ -30,29 +29,33 @@ echo "IMAGE_REPO_SUFFIX: $IMG_MODIFIER"
 # Print cluster version
 kubectl version
 
-# Install Tiller with TLS support
-kubectl -n kube-system create sa tiller
-kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
-helm init \
-  --service-account tiller \
-  --tiller-tls \
-  --tiller-tls-cert ${CERTS_DIR}/tiller.cert.pem \
-  --tiller-tls-key ${CERTS_DIR}/tiller.key.pem \
-  --tiller-tls-verify \
-  --tls-ca-cert ${CERTS_DIR}/ca.cert.pem
+# Helm v2 vs v3 configuration
+USE_HELM3="true"
+if [[ "$HELM_VERSION" =~ "v2" ]]; then
+  USE_HELM3="false"
+  HELM_CLIENT_TLS_FLAGS="--tls --tls-cert ${CERTS_DIR}/helm.cert.pem --tls-key ${CERTS_DIR}/helm.key.pem"
+  TILLER_PROXY_TLS_FLAGS="--set tillerProxy.tls.key=\"$(cat ${CERTS_DIR}/helm.key.pem)\" --set tillerProxy.tls.cert=\"$(cat ${CERTS_DIR}/helm.cert.pem)\""
 
-# The flag --wait is not available when using TLS flags:
-# https://github.com/helm/helm/issues/4050
-echo "Waiting for Tiller to be ready ... "
-cnt=60 # 60 retries (about 60s)
-until helm version ${HELM_CLIENT_TLS_FLAGS} --tiller-connection-timeout 1; do
-  ((cnt=cnt-1)) || return 1
-  sleep 1
-done
+  # Install Tiller with TLS support
+  kubectl -n kube-system create sa tiller
+  kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+  helm init \
+    --service-account tiller \
+    --tiller-tls \
+    --tiller-tls-cert ${CERTS_DIR}/tiller.cert.pem \
+    --tiller-tls-key ${CERTS_DIR}/tiller.key.pem \
+    --tiller-tls-verify \
+    --tls-ca-cert ${CERTS_DIR}/ca.cert.pem
 
-# Add admin permissions to default user in kube-system namespace
-kubectl get clusterrolebinding kube-dns-admin >& /dev/null || \
-    kubectl create clusterrolebinding kube-dns-admin --serviceaccount=kube-system:default --clusterrole=cluster-admin 
+  # The flag --wait is not available when using TLS flags:
+  # https://github.com/helm/helm/issues/4050
+  echo "Waiting for Tiller to be ready ... "
+  cnt=60 # 60 retries (about 60s)
+  until helm version ${HELM_CLIENT_TLS_FLAGS} --tiller-connection-timeout 1; do
+    ((cnt=cnt-1)) || return 1
+    sleep 1
+  done
+fi
 
 dbFlags="--set mongodb.enabled=true --set postgresql.enabled=false"
 if [[ "${KUBEAPPS_DB}" == "postgresql" ]]; then
@@ -79,8 +82,7 @@ helm install --name kubeapps-ci --namespace kubeapps $ROOT_DIR/chart/kubeapps \
     `# Tiller TLS flags` \
     ${HELM_CLIENT_TLS_FLAGS} \
     `# Tiller-proxy TLS flags` \
-    --set tillerProxy.tls.key="$(cat ${CERTS_DIR}/helm.key.pem)" \
-    --set tillerProxy.tls.cert="$(cat ${CERTS_DIR}/helm.cert.pem)" \
+    ${TILLER_PROXY_TLS_FLAGS} \
     `# Image flags` \
     --set apprepository.image.tag=${DEV_TAG} \
     --set apprepository.image.repository=${apprepositoryControllerImage}${IMG_MODIFIER} \
@@ -93,7 +95,9 @@ helm install --name kubeapps-ci --namespace kubeapps $ROOT_DIR/chart/kubeapps \
     --set tillerProxy.image.tag=${DEV_TAG} \
     --set tillerProxy.image.repository=${tillerProxyImage}${IMG_MODIFIER} \
     `# Database choice flags` \
-    ${dbFlags}
+    ${dbFlags} \
+    `# Enable Helm 3 flag` \
+    --useHelm3=${USE_HELM3}
 
 # Ensure that we are testing the correct image
 k8s_ensure_image kubeapps kubeapps-ci-internal-apprepository-controller $DEV_TAG
