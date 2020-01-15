@@ -296,7 +296,7 @@ jobs:
     working_directory: /go/src/github.com/kubeapps/kubeapps
     environment:
       GOPATH: /home/circleci/.go_workspace
-      IMAGES: "apprepository-controller tiller-proxy asset-syncer assetsvc"
+      IMAGES: "apprepository-controller tiller-proxy asset-syncer assetsvc kubeops"
     <<: *build_images
   build_dashboard:
     docker:
